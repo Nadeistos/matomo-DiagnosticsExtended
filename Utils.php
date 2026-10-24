@@ -37,7 +37,8 @@ class Utils
             case "":
                 return false;
             default:
-                return $iniValue;
+                // unrecognized value (e.g. "stderr") is treated as enabled
+                return true;
         }
     }
 

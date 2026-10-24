@@ -1,5 +1,10 @@
 ## Changelog
 
+### 0.3.0
+
+- PHP 8.4 compatibility: updated PHP end-of-life dates (8.0 to 8.5)
+- no more warnings when OPcache status can't be read
+
 ### 0.2.0
 
 Matomo 5 compatibility

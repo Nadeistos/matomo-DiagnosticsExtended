@@ -49,6 +49,13 @@ class OpcacheCheck implements Diagnostic
             return [$result];
         } else {
             $status = @opcache_get_status();
+            if ($status === false) {
+                $result->addItem(new DiagnosticResultItem(
+                    DiagnosticResult::STATUS_INFORMATIONAL,
+                    "OPcache status could not be read"
+                ));
+                return [$result];
+            }
             $memoryUsage = $status["memory_usage"];
             $interned = $status["interned_strings_usage"];
             $statistics = $status["opcache_statistics"];
