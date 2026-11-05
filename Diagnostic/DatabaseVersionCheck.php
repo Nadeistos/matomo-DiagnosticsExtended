@@ -102,7 +102,11 @@ class DatabaseVersionCheck extends AbstractCheck
             } else {
                 $results->addItem(new DiagnosticResultItem(
                     $outdatedStatus,
-                    Piwik::translate($keyPrefix . "Outdated", [$latestVersion, $rawVersion, $currentVersion])
+                    Piwik::translate($keyPrefix . "Outdated", [
+                        htmlspecialchars($latestVersion, ENT_QUOTES, 'UTF-8'),
+                        htmlspecialchars($rawVersion, ENT_QUOTES, 'UTF-8'),
+                        $currentVersion
+                    ])
                     . " " . $disclaimer . "."
                 ));
             }

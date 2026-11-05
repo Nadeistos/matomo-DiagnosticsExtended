@@ -28,6 +28,11 @@ class RemoteDataFetcher
     public const FAILURE_TTL = 3600;
 
     /**
+     * The largest expected response (curl's vuln.pm) is a few hundred KB
+     */
+    public const MAX_RESPONSE_SIZE = 5 * 1024 * 1024;
+
+    /**
      * Hosts that couldn't be reached during the current request (e.g. blocked by a firewall),
      * so that we don't wait for the timeout again for every following request to the same host.
      *
@@ -90,7 +95,13 @@ class RemoteDataFetcher
                 true
             );
             $status = is_array($response) && isset($response['status']) ? (int) $response['status'] : 0;
-            if ($status === 200 && isset($response['data']) && is_string($response['data']) && $response['data'] !== '') {
+            if (
+                $status === 200
+                && isset($response['data'])
+                && is_string($response['data'])
+                && $response['data'] !== ''
+                && strlen($response['data']) <= self::MAX_RESPONSE_SIZE
+            ) {
                 $body = $response['data'];
             } else {
                 $this->logger->debug('DiagnosticsExtended: unexpected HTTP status {status} for {url}', [

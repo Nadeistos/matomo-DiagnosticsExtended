@@ -15,6 +15,7 @@
 - OPcache check: report OPcache restarts caused by a too small cache, fix the wasted memory percentage, detect the JIT correctly (PHP 8.4 disables it by default), fix the recommended value of `opcache.save_comments`
 - php.ini check: `display_errors = stderr` is fine, `display_errors`/`expose_php` are not relevant on the command line, link to the PHP documentation
 - external requests are cached (also failures, for one hour) so the System Check widget isn't slowed down
+- security hardening: values from external services and the database server are escaped before being shown, remote version numbers must match a strict format, remote responses are limited to 5 MB, the help notification is only created for super users
 
 ### 0.2.0
 

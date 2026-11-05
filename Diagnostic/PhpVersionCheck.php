@@ -86,7 +86,10 @@ class PhpVersionCheck extends AbstractCheck
         } else {
             $results->addItem(new DiagnosticResultItem(
                 $outdatedStatus,
-                Piwik::translate("DiagnosticsExtended_PhpVersionCheckOutdated", [$latestVersion, $currentVersion])
+                Piwik::translate("DiagnosticsExtended_PhpVersionCheckOutdated", [
+                    htmlspecialchars($latestVersion, ENT_QUOTES, 'UTF-8'),
+                    $currentVersion
+                ])
                 . " "
                 . Piwik::translate("DiagnosticsExtended_BackportingDisclaimerPHP")
                 . "."

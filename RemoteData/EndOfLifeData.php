@@ -83,7 +83,7 @@ class EndOfLifeData
      */
     private function normalize($latest, $eolDate, $isEol): ?array
     {
-        $latest = is_string($latest) && preg_match('/^\d+\.\d+(\.\d+)?/', $latest) ? $latest : null;
+        $latest = is_string($latest) && preg_match('/^\d+(\.\d+){1,3}$/', $latest) ? $latest : null;
         $eolDate = is_string($eolDate) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $eolDate) ? $eolDate : null;
         if ($eolDate !== null) {
             $isEol = $eolDate <= gmdate('Y-m-d');

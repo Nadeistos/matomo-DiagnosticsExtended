@@ -23,7 +23,7 @@ class DiagnosticsExtended extends \Piwik\Plugin
 
     public function addNotification(&$module, &$action, &$parameters): void
     {
-        if ($module !== "Installation" || $action !== "systemCheckPage") {
+        if ($module !== "Installation" || $action !== "systemCheckPage" || !Piwik::hasUserSuperUserAccess()) {
             return;
         }
 
