@@ -12,6 +12,7 @@
 - database version check: support MariaDB 11+ and the `5.5.5-` version prefix, check MySQL against endoflife.date, translated messages
 - curl check: robust parsing of the vulnerability list, only list the first 10 CVEs, report a warning instead of an error
 - matomo.js check: accept `text/javascript` (RFC 9239), check the `Content-Encoding` header, case-insensitive headers
+- OPcache check: the percent sign is written `%%` in the translations instead of the HTML entity `&percnt;`, which was shown as is by `./console diagnostics:run`
 - OPcache check: report OPcache restarts caused by a too small cache, fix the wasted memory percentage, detect the JIT correctly (PHP 8.4 disables it by default), fix the recommended value of `opcache.save_comments`
 - php.ini check: `display_errors = stderr` is fine, `display_errors`/`expose_php` are not relevant on the command line, link to the PHP documentation
 - external requests are cached (also failures, for one hour) so the System Check widget isn't slowed down
