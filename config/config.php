@@ -1,24 +1,25 @@
 <?php
-return [
-    'diagnosticsExtended.inisettings' => DI\add([
-        DI\get('\Piwik\Plugins\DiagnosticsExtended\Diagnostic\IniSettings\AllowUrlInclude'),
-        DI\get('\Piwik\Plugins\DiagnosticsExtended\Diagnostic\IniSettings\DisplayErrors'),
-        DI\get('\Piwik\Plugins\DiagnosticsExtended\Diagnostic\IniSettings\ExposePhp'),
-    ]),
-    '\Piwik\Plugins\DiagnosticsExtended\Diagnostic\PhpIniCheck' => DI\autowire()
-        ->constructor(
-            DI\get('diagnosticsExtended.inisettings')
-        ),
-    'diagnostics.optional' => DI\add([
-//        DI\get('\Piwik\Plugins\DiagnosticsExtended\Diagnostic\ExampleCheck'),
-        DI\get('\Piwik\Plugins\DiagnosticsExtended\Diagnostic\PhpIniCheck'),
-        DI\get('\Piwik\Plugins\DiagnosticsExtended\Diagnostic\PhpVersionCheck'),
-        DI\get('\Piwik\Plugins\DiagnosticsExtended\Diagnostic\DatabaseVersionCheck'),
-        DI\get('\Piwik\Plugins\DiagnosticsExtended\Diagnostic\MatomoJsCheck'),
-        DI\get('\Piwik\Plugins\DiagnosticsExtended\Diagnostic\CurlVersionCheck'),
-        DI\get('\Piwik\Plugins\DiagnosticsExtended\Diagnostic\OpensslVersionCheck'),
-        DI\get('\Piwik\Plugins\DiagnosticsExtended\Diagnostic\PhpUserCheck'),
-        DI\get('\Piwik\Plugins\DiagnosticsExtended\Diagnostic\OpcacheCheck'),
-    ]),
 
+use Piwik\DI;
+use Piwik\Plugins\DiagnosticsExtended\Diagnostic;
+
+return [
+    'diagnosticsExtended.inisettings' => DI::add([
+        DI::get(Diagnostic\IniSettings\AllowUrlInclude::class),
+        DI::get(Diagnostic\IniSettings\DisplayErrors::class),
+        DI::get(Diagnostic\IniSettings\ExposePhp::class),
+    ]),
+    Diagnostic\PhpIniCheck::class => DI::autowire()
+        ->constructorParameter('iniSettings', DI::get('diagnosticsExtended.inisettings')),
+    'diagnostics.optional' => DI::add([
+//        DI::get(Diagnostic\ExampleCheck::class),
+        DI::get(Diagnostic\PhpIniCheck::class),
+        DI::get(Diagnostic\PhpVersionCheck::class),
+        DI::get(Diagnostic\DatabaseVersionCheck::class),
+        DI::get(Diagnostic\MatomoJsCheck::class),
+        DI::get(Diagnostic\CurlVersionCheck::class),
+        DI::get(Diagnostic\OpensslVersionCheck::class),
+        DI::get(Diagnostic\PhpUserCheck::class),
+        DI::get(Diagnostic\OpcacheCheck::class),
+    ]),
 ];

@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Matomo - free/libre analytics platform
  *
@@ -8,64 +9,61 @@
 
 namespace Piwik\Plugins\DiagnosticsExtended\Diagnostic;
 
+use Piwik\Log\LoggerInterface;
 use Piwik\Piwik;
-use Piwik\Plugins\Diagnostics\Diagnostic\Diagnostic;
 use Piwik\Plugins\Diagnostics\Diagnostic\DiagnosticResult;
 use Piwik\Plugins\Diagnostics\Diagnostic\DiagnosticResultItem;
 use Piwik\Plugins\DiagnosticsExtended\Diagnostic\IniSettings\IniSetting;
-use Piwik\Plugins\DiagnosticsExtended\Utils;
-use Psr\Log\LoggerInterface;
 
-class PhpIniCheck implements Diagnostic
+class PhpIniCheck extends AbstractCheck
 {
-    /**
-     * @var LoggerInterface
-     */
-    private $logger;
     /**
      * @var IniSetting[]
      */
     private $iniSettings;
-    /**
-     * @var string
-     */
-    private $label;
 
+    /**
+     * @param IniSetting[] $iniSettings
+     */
     public function __construct(array $iniSettings, LoggerInterface $logger)
     {
-        $this->logger = $logger;
+        parent::__construct($logger);
         $this->iniSettings = $iniSettings;
-        $this->label = "🧪 " . Piwik::translate("DiagnosticsExtended_PhpIniCheckLabel");
     }
 
-    public function execute()
+    protected function getLabel(): string
     {
-        $result = new DiagnosticResult($this->label);
-        foreach ($this->iniSettings as $setting) {
-            $key = $setting::$key;
-            if (Utils::booleanIni($key) === $setting::$targetValue) {
-                $item = new DiagnosticResultItem(
-                    DiagnosticResult::STATUS_OK,
-                    $setting::$targetValue
-                        ? Piwik::translate("DiagnosticsExtended_PhpIniCheckIsEnabled", [$key])
-                        : Piwik::translate("DiagnosticsExtended_PhpIniCheckIsDisabled", [$key])
-                );
-
-            } else {
-                $status = $setting::$severe ? DiagnosticResult::STATUS_ERROR : DiagnosticResult::STATUS_WARNING;
-                $item = new DiagnosticResultItem(
-                    $status,
-                    $setting::$targetValue
-                        ? Piwik::translate("DiagnosticsExtended_PhpIniCheckShouldBeEnabled", [$key])
-                        : Piwik::translate("DiagnosticsExtended_PhpIniCheckShouldBeDisabled", [$key])
-                );
-            }
-            $result->addItem($item);
-        }
-        return array($result);
+        return self::LABEL_PREFIX . Piwik::translate("DiagnosticsExtended_PhpIniCheckLabel");
     }
 
-
-
-
+    protected function doExecute(): array
+    {
+        $isCli = PHP_SAPI === 'cli' || PHP_SAPI === 'phpdbg';
+        $result = new DiagnosticResult($this->getLabel());
+        foreach ($this->iniSettings as $setting) {
+            if (!$setting instanceof IniSetting) {
+                continue;
+            }
+            $key = $setting->getFormattedKey();
+            $targetValue = $setting->getTargetValue();
+            if ($setting->getCurrentValue() === $targetValue) {
+                $status = DiagnosticResult::STATUS_OK;
+                $message = $targetValue
+                    ? Piwik::translate("DiagnosticsExtended_PhpIniCheckIsEnabled", [$key])
+                    : Piwik::translate("DiagnosticsExtended_PhpIniCheckIsDisabled", [$key]);
+            } else {
+                if ($isCli && !$setting->isRelevantForCli()) {
+                    // the value used by the webserver can't be determined from the command line
+                    $status = DiagnosticResult::STATUS_INFORMATIONAL;
+                } else {
+                    $status = $setting->isSevere() ? DiagnosticResult::STATUS_ERROR : DiagnosticResult::STATUS_WARNING;
+                }
+                $message = $targetValue
+                    ? Piwik::translate("DiagnosticsExtended_PhpIniCheckShouldBeEnabled", [$key])
+                    : Piwik::translate("DiagnosticsExtended_PhpIniCheckShouldBeDisabled", [$key]);
+            }
+            $result->addItem(new DiagnosticResultItem($status, $message));
+        }
+        return [$result];
+    }
 }

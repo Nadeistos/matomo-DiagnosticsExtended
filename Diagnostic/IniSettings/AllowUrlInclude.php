@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Matomo - free/libre analytics platform
  *
@@ -10,10 +11,9 @@ namespace Piwik\Plugins\DiagnosticsExtended\Diagnostic\IniSettings;
 
 class AllowUrlInclude extends IniSetting
 {
-    static public $key = "allow_url_include";
+    public static $key = "allow_url_include";
 
     public static $targetValue = false;
 
     public static $url = "https://www.php.net/manual/en/filesystem.configuration.php#ini.allow-url-include";
-
 }

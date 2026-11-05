@@ -10,11 +10,29 @@ Please report back any unexpected results you come across or other feedback so t
 
 ### Currently supported tests:
 
-- curl version check
-- MySQL/MariaDB version check
-- matomo.js check (Gzip, MIME-Type)
-- Opcache check (enabled and set up correctly)
+- curl version check (known vulnerabilities)
+- OpenSSL version check
+- MySQL/MariaDB version check (latest patch version, end of life)
+- matomo.js check (compression, MIME type)
+- OPcache check (enabled and set up correctly)
 - php.ini settings
-- php running as root
-- php version check
-- check if secret files are protected by webserver
+- PHP running as root
+- PHP version check (latest patch version, end of life)
+
+### Requirements
+
+- Matomo 5 or Matomo 6
+- PHP 7.2.5 or newer (the minimum of Matomo 5), tested up to PHP 8.5
+
+### External services
+
+When internet features are enabled in Matomo (`enable_internet_features`), some checks fetch data from
+[endoflife.date](https://endoflife.date), [php.net](https://www.php.net/releases/) and
+[curl.se](https://curl.se/docs/vuln.pm). The responses are cached (failures for one hour) so that the system check
+stays fast even if those services can't be reached.
+
+### False positives
+
+Linux distributions (Debian, Ubuntu, RHEL, ...) backport security fixes without changing the upstream version number.
+When PHP or the database server seem to come from a distribution package, outdated version numbers are therefore only
+reported as information instead of a warning.

@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Matomo - free/libre analytics platform
  *
@@ -9,140 +10,130 @@
 namespace Piwik\Plugins\DiagnosticsExtended\Diagnostic;
 
 use Piwik\Date;
-use Piwik\Http;
+use Piwik\Log\LoggerInterface;
 use Piwik\Piwik;
-use Piwik\Plugins\Diagnostics\Diagnostic\Diagnostic;
 use Piwik\Plugins\Diagnostics\Diagnostic\DiagnosticResult;
 use Piwik\Plugins\Diagnostics\Diagnostic\DiagnosticResultItem;
-use Piwik\SettingsPiwik;
-use Psr\Log\LoggerInterface;
+use Piwik\Plugins\DiagnosticsExtended\RemoteData\EndOfLifeData;
+use Piwik\Plugins\DiagnosticsExtended\RemoteData\RemoteDataFetcher;
+use Piwik\Plugins\DiagnosticsExtended\Utils;
 
-class PhpVersionCheck implements Diagnostic
+class PhpVersionCheck extends AbstractCheck
 {
     /**
-     * @var LoggerInterface
+     * End of security support, used when https://endoflife.date can't be reached.
+     * From https://www.php.net/supported-versions.php and https://www.php.net/eol.php
+     * (since the release cycle RFC of 2024, security support ends on December 31st)
+     *
+     * @var array<string, string>
      */
-    private $logger;
-    /**
-     * @var string
-     */
-    private $label;
-
-    const SOCKET_TIMEOUT = 2;
-    /**
-     * @var \Matomo\Cache\Lazy
-     */
-    private $lazyCache;
-
-
-    public function __construct(LoggerInterface $logger, \Matomo\Cache\Lazy $lazyCache)
-    {
-        $this->logger = $logger;
-        $this->label = "🧪 " . Piwik::translate("DiagnosticsExtended_PhpVersionCheckLabel");
-        $this->lazyCache = $lazyCache;
-    }
-
-    /**
-     * from
-     * https://www.php.net/supported-versions
-     * and
-     * https://www.php.net/eol.php
-     * @var string[]
-     */
-    private $eolDates = [
+    private const EOL_DATES = [
         "7.2" => "2020-11-30",
         "7.3" => "2021-12-06",
         "7.4" => "2022-11-28",
         "8.0" => "2023-11-26",
-        "8.1" => "2024-11-25",
-        "8.2" => "2025-12-08"
+        "8.1" => "2025-12-31",
+        "8.2" => "2026-12-31",
+        "8.3" => "2027-12-31",
+        "8.4" => "2028-12-31",
+        "8.5" => "2029-12-31",
     ];
 
+    /**
+     * @var EndOfLifeData
+     */
+    private $endOfLifeData;
 
     /**
-     * @return DiagnosticResult[]
+     * @var RemoteDataFetcher
      */
-    public function execute()
+    private $fetcher;
+
+    public function __construct(LoggerInterface $logger, EndOfLifeData $endOfLifeData, RemoteDataFetcher $fetcher)
+    {
+        parent::__construct($logger);
+        $this->endOfLifeData = $endOfLifeData;
+        $this->fetcher = $fetcher;
+    }
+
+    protected function getLabel(): string
+    {
+        return self::LABEL_PREFIX . Piwik::translate("DiagnosticsExtended_PhpVersionCheckLabel");
+    }
+
+    protected function doExecute(): array
     {
         $minorVersion = PHP_MAJOR_VERSION . "." . PHP_MINOR_VERSION;
         $currentVersion = $minorVersion . "." . PHP_RELEASE_VERSION;
-        $cacheId = 'DiagnosticsExtended_PhpVersion_' . $minorVersion;
+        $isDistributionPackage = Utils::isDistributionPackagedPhp();
+        $outdatedStatus = $isDistributionPackage ? DiagnosticResult::STATUS_INFORMATIONAL : DiagnosticResult::STATUS_WARNING;
 
-        $url = "https://php.net/releases/?json=1&version=" . $minorVersion;
-        $timeout = self::SOCKET_TIMEOUT;
-        try {
-            if (!SettingsPiwik::isInternetEnabled()) {
-                throw new \Exception("internet is disabled");
-            }
-            $response = $this->lazyCache->fetch($cacheId);
-            if (!$response) {
-                $response = Http::sendHttpRequest($url, $timeout);
-                $this->lazyCache->save($cacheId, $response, 60 * 60 * 24);
-            }
-            $versionInfo = json_decode($response, true);
-            if (empty($versionInfo["version"])) {
-                return [$this->testCouldNotRunResult()];
-            }
-            $latestVersion = $versionInfo["version"];
-            $results = new DiagnosticResult($this->label);
-            if (version_compare($currentVersion, $latestVersion, ">=")) {
-                $results->addItem(new DiagnosticResultItem(
-                    DiagnosticResult::STATUS_OK,
-                    Piwik::translate("DiagnosticsExtended_PhpVersionCheckLatestVersion", [$minorVersion])
-                ));
-            } else {
-                $results->addItem(new DiagnosticResultItem(
-                    DiagnosticResult::STATUS_WARNING,
-                    Piwik::translate("DiagnosticsExtended_PhpVersionCheckOutdated", [
-                        $latestVersion, $currentVersion
-                    ])
-                    . " "
-                    . Piwik::translate("DiagnosticsExtended_BackportingDisclaimerPHP")
-                    . "."
-                ));
-            }
-            if (empty($this->eolDates[$minorVersion])) {
-                $results->addItem(new DiagnosticResultItem(
-                    DiagnosticResult::STATUS_INFORMATIONAL,
-                    Piwik::translate("DiagnosticsExtended_PhpVersionCheckNoInformation", [
-                        $latestVersion, $currentVersion
-                    ])
-                ));
+        $release = $this->endOfLifeData->getRelease('php', $minorVersion);
+        $latestVersion = $release['latest'] ?? $this->getLatestVersionFromPhpNet($minorVersion);
 
-            } elseif (new \DateTime() > new \DateTime($this->eolDates[$minorVersion])) {
-                $formattedDate = (Date::factory($this->eolDates[$minorVersion]))->getLocalized(Date::DATE_FORMAT_LONG);
-                $results->addItem(new DiagnosticResultItem(
-                    DiagnosticResult::STATUS_WARNING,
-                    Piwik::translate("DiagnosticsExtended_PhpVersionCheckEol", [
-                        $currentVersion, $formattedDate
-                    ])
-                    . " "
-                    . Piwik::translate("DiagnosticsExtended_BackportingDisclaimerPHP")
-                    . "."
-                ));
-            } else {
-                $formattedDate = (Date::factory($this->eolDates[$minorVersion]))->getLocalized(Date::DATE_FORMAT_LONG);
-                $results->addItem(new DiagnosticResultItem(
-                    DiagnosticResult::STATUS_OK,
-                    Piwik::translate("DiagnosticsExtended_PhpVersionCheckNotEol", [
-                        $minorVersion, $formattedDate
-                    ])
-                ));
-            }
-        } catch (\Exception $e) {
-            $this->logger->info("failed to check PHP version");
-            $this->logger->info($e);
-            return [$this->testCouldNotRunResult()];
+        $results = new DiagnosticResult($this->getLabel());
+
+        if ($latestVersion === null) {
+            $results->addItem(new DiagnosticResultItem(
+                DiagnosticResult::STATUS_INFORMATIONAL,
+                Piwik::translate("DiagnosticsExtended_PhpVersionCheckNotWorking")
+            ));
+        } elseif (version_compare($currentVersion, $latestVersion, ">=")) {
+            $results->addItem(new DiagnosticResultItem(
+                DiagnosticResult::STATUS_OK,
+                Piwik::translate("DiagnosticsExtended_PhpVersionCheckLatestVersion", [$minorVersion])
+            ));
+        } else {
+            $results->addItem(new DiagnosticResultItem(
+                $outdatedStatus,
+                Piwik::translate("DiagnosticsExtended_PhpVersionCheckOutdated", [$latestVersion, $currentVersion])
+                . " "
+                . Piwik::translate("DiagnosticsExtended_BackportingDisclaimerPHP")
+                . "."
+            ));
         }
+
+        $eolDate = $release['eolDate'] ?? (self::EOL_DATES[$minorVersion] ?? null);
+        if ($eolDate === null) {
+            $results->addItem(new DiagnosticResultItem(
+                DiagnosticResult::STATUS_INFORMATIONAL,
+                Piwik::translate("DiagnosticsExtended_PhpVersionCheckNoInformation", [$currentVersion])
+            ));
+            return [$results];
+        }
+
+        $formattedDate = Date::factory($eolDate)->getLocalized(Date::DATE_FORMAT_LONG);
+        if ($eolDate <= gmdate('Y-m-d')) {
+            $results->addItem(new DiagnosticResultItem(
+                $outdatedStatus,
+                Piwik::translate("DiagnosticsExtended_PhpVersionCheckEol", [$currentVersion, $formattedDate])
+                . " "
+                . Piwik::translate("DiagnosticsExtended_BackportingDisclaimerPHP")
+                . "."
+            ));
+        } else {
+            $results->addItem(new DiagnosticResultItem(
+                DiagnosticResult::STATUS_OK,
+                Piwik::translate("DiagnosticsExtended_PhpVersionCheckNotEol", [$minorVersion, $formattedDate])
+            ));
+        }
+
         return [$results];
     }
 
-    private function testCouldNotRunResult()
+    private function getLatestVersionFromPhpNet(string $minorVersion): ?string
     {
-        return DiagnosticResult::singleResult(
-            $this->label,
-            DiagnosticResult::STATUS_INFORMATIONAL,
-            Piwik::translate("DiagnosticsExtended_PhpVersionCheckNotWorking")
+        $versionInfo = $this->fetcher->fetchJson(
+            "https://www.php.net/releases/?json=1&version=" . rawurlencode($minorVersion),
+            86400
         );
+        if (
+            !isset($versionInfo["version"])
+            || !is_string($versionInfo["version"])
+            || !preg_match('/^\d+\.\d+\.\d+$/', $versionInfo["version"])
+        ) {
+            return null;
+        }
+        return $versionInfo["version"];
     }
 }

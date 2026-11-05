@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Matomo - free/libre analytics platform
  *
@@ -16,30 +17,28 @@ class DiagnosticsExtended extends \Piwik\Plugin
     public function registerEvents()
     {
         return [
-            'Request.dispatch' => "addNotification"
+            'Request.dispatch' => 'addNotification',
         ];
     }
 
-    public function addNotification(&$module, &$action, &$parameters)
+    public function addNotification(&$module, &$action, &$parameters): void
     {
-        if ($module == "Installation" && $action == "systemCheckPage") {
-            $id = 'DiagnosticsExtended_Help';
-
-            $notification = new Notification(Piwik::translate("DiagnosticsExtended_NotificationText",
-                [
-                    '<a href="https://forum.matomo.org/" target="_blank" rel="noopener">',
-                    '</a>',
-                    '<a href="https://github.com/Findus23/matomo-DiagnosticsExtended/issues" target="_blank" rel="noopener">',
-                    '</a>'
-                ]
-            ));
-            $notification->raw = true;
-            $notification->title = Piwik::translate('DiagnosticsExtended_NotificationTitle');
-            $notification->context = Notification::CONTEXT_INFO;
-            \Piwik\Notification\Manager::notify($id, $notification);
+        if ($module !== "Installation" || $action !== "systemCheckPage") {
+            return;
         }
+
+        $notification = new Notification(Piwik::translate(
+            "DiagnosticsExtended_NotificationText",
+            [
+                '<a href="https://forum.matomo.org/" target="_blank" rel="noreferrer noopener">',
+                '</a>',
+                '<a href="https://github.com/Findus23/matomo-DiagnosticsExtended/issues" target="_blank" rel="noreferrer noopener">',
+                '</a>',
+            ]
+        ));
+        $notification->raw = true;
+        $notification->title = Piwik::translate('DiagnosticsExtended_NotificationTitle');
+        $notification->context = Notification::CONTEXT_INFO;
+        Notification\Manager::notify('DiagnosticsExtended_Help', $notification);
     }
-
-
-
 }

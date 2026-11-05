@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Matomo - free/libre analytics platform
  *
@@ -8,108 +9,146 @@
 
 namespace Piwik\Plugins\DiagnosticsExtended\Diagnostic;
 
-use Piwik\Http;
+use Piwik\Log\LoggerInterface;
 use Piwik\Piwik;
-use Piwik\Plugins\Diagnostics\Diagnostic\Diagnostic;
 use Piwik\Plugins\Diagnostics\Diagnostic\DiagnosticResult;
-use Piwik\SettingsPiwik;
-use Psr\Log\LoggerInterface;
+use Piwik\Plugins\DiagnosticsExtended\RemoteData\RemoteDataFetcher;
+use Piwik\Plugins\DiagnosticsExtended\Utils;
 
-class CurlVersionCheck implements Diagnostic
+class CurlVersionCheck extends AbstractCheck
 {
-    /**
-     * @var LoggerInterface
-     */
-    private $logger;
-    /**
-     * @var string
-     */
-    private $label;
-
-    const SOCKET_TIMEOUT = 2;
-    const CACHEID = "DiagnosticsExtended_CurlVulnerabilities";
+    public const VULNERABILITIES_URL = "https://curl.se/docs/vuln.pm";
 
     /**
-     * @var \Matomo\Cache\Lazy
+     * Only list this many CVEs, old curl versions can be affected by more than a hundred.
      */
-    private $lazyCache;
+    private const MAX_LISTED_VULNERABILITIES = 10;
 
+    /**
+     * @var RemoteDataFetcher
+     */
+    private $fetcher;
 
-    public function __construct(LoggerInterface $logger, \Matomo\Cache\Lazy $lazyCache)
+    public function __construct(LoggerInterface $logger, RemoteDataFetcher $fetcher)
     {
-        $this->logger = $logger;
-        $this->label = "🧪 " . Piwik::translate("DiagnosticsExtended_CurlVersionCheckLabel");
-        $this->lazyCache = $lazyCache;
+        parent::__construct($logger);
+        $this->fetcher = $fetcher;
     }
 
-
-    /**
-     * @return DiagnosticResult[]
-     */
-    public function execute()
+    protected function getLabel(): string
     {
-        if (!extension_loaded('curl')) {
+        return self::LABEL_PREFIX . Piwik::translate("DiagnosticsExtended_CurlVersionCheckLabel");
+    }
+
+    protected function doExecute(): array
+    {
+        if (!extension_loaded('curl') || !function_exists('curl_version')) {
             return [DiagnosticResult::singleResult(
-                $this->label,
+                $this->getLabel(),
                 DiagnosticResult::STATUS_INFORMATIONAL,
                 Piwik::translate("DiagnosticsExtended_CurlVersionCheckNoCurl")
             )];
         }
-        $version = curl_version()["version"];
+        $curlInfo = curl_version();
+        $version = is_array($curlInfo) && isset($curlInfo["version"]) ? (string) $curlInfo["version"] : '';
 
-        $url = "https://curl.se/docs/vuln.pm";
-        $timeout = self::SOCKET_TIMEOUT;
-        try {
-            if (!SettingsPiwik::isInternetEnabled()) {
-                throw new \Exception("internet is disabled");
+        $response = $this->fetcher->fetch(self::VULNERABILITIES_URL, 86400);
+        $vulnerabilities = $response === null ? [] : $this->parseVulnerabilities($response);
+        if ($version === '' || $response === null || count($vulnerabilities) === 0) {
+            // count() === 0 means the file format has changed and couldn't be parsed
+            return [$this->failedResult()];
+        }
+
+        $matches = [];
+        foreach ($vulnerabilities as $vulnerability) {
+            if (
+                version_compare($version, $vulnerability['first'], ">=")
+                && version_compare($version, $vulnerability['last'], "<=")
+            ) {
+                $matches[] = $vulnerability;
             }
-            $response = $this->lazyCache->fetch(self::CACHEID);
-            if (!$response) {
-                $response = Http::sendHttpRequest($url, $timeout);
-                $this->lazyCache->save(self::CACHEID, $response, 60 * 60 * 24 * 7);
-            }
-            $vulns = [];
-            foreach (explode("\n", $response) as $line) {
-                $line = trim($line);
-                if (strpos($line, "#") === 0 || strpos($line, "@") === 0 || strpos($line, ")") === 0) {
-                    continue;
-                }
-                $line = str_replace('"', "", $line);
-                $cols = explode("|", $line);
-                $startVersion = $cols[1];
-                $endVersion = $cols[2];
-                $URL = htmlspecialchars($cols[0], ENT_QUOTES, 'UTF-8');
-                $CVE = htmlspecialchars($cols[4], ENT_QUOTES, 'UTF-8');
-                if (
-                    version_compare($version, $startVersion, ">=") &&
-                    version_compare($version, $endVersion, "<=")
-                ) {
-                    $vulns[] = "<a target='_blank' rel='noopener' href='https://curl.se/docs/$URL'>$CVE</a>";
-                }
-            }
-            if (count($vulns) > 0) {
-                return [DiagnosticResult::singleResult(
-                    $this->label,
-                    DiagnosticResult::STATUS_ERROR,
-                    Piwik::translate("DiagnosticsExtended_CurlVersionCheckVulnerable",[$version])
-                    . " "
-                    . join(", ", $vulns)
-                )];
-            } else {
-                return [DiagnosticResult::singleResult(
-                    $this->label,
-                    DiagnosticResult::STATUS_OK,
-                    Piwik::translate("DiagnosticsExtended_CurlVersionCheckUpToDate", [$version])
-                )];
-            }
-        } catch (\Exception $e) {
+        }
+
+        if (count($matches) === 0) {
             return [DiagnosticResult::singleResult(
-                $this->label,
-                DiagnosticResult::STATUS_INFORMATIONAL,
-                Piwik::translate("DiagnosticsExtended_CurlVersionCheckFailed")
+                $this->getLabel(),
+                DiagnosticResult::STATUS_OK,
+                Piwik::translate("DiagnosticsExtended_CurlVersionCheckUpToDate", [htmlspecialchars($version)])
             )];
         }
 
+        $links = [];
+        foreach (array_slice($matches, 0, self::MAX_LISTED_VULNERABILITIES) as $vulnerability) {
+            $links[] = sprintf(
+                '<a target="_blank" rel="noreferrer noopener" href="https://curl.se/docs/%s">%s</a>',
+                htmlspecialchars($vulnerability['page'], ENT_QUOTES, 'UTF-8'),
+                htmlspecialchars($vulnerability['cve'], ENT_QUOTES, 'UTF-8')
+            );
+        }
+        $list = implode(", ", $links);
+        if (count($matches) > self::MAX_LISTED_VULNERABILITIES) {
+            $list .= sprintf(" … (+%d)", count($matches) - self::MAX_LISTED_VULNERABILITIES);
+        }
 
+        // libcurl is usually provided by the operating system, which backports security fixes
+        $status = Utils::isDistributionPackagedPhp()
+            ? DiagnosticResult::STATUS_INFORMATIONAL
+            : DiagnosticResult::STATUS_WARNING;
+
+        return [DiagnosticResult::singleResult(
+            $this->getLabel(),
+            $status,
+            Piwik::translate("DiagnosticsExtended_CurlVersionCheckVulnerable", [htmlspecialchars($version)])
+            . " " . $list
+        )];
+    }
+
+    /**
+     * Parses https://curl.se/docs/vuln.pm which contains lines like
+     * "CVE-2024-9681.html|7.74.0|8.10.1|HSTS subdomain overwrites parent cache entry|CVE-2024-9681|...",
+     *
+     * @return array<array{page: string, first: string, last: string, cve: string}>
+     */
+    public function parseVulnerabilities(string $response): array
+    {
+        $vulnerabilities = [];
+        foreach (preg_split('/\R/', $response) ?: [] as $line) {
+            $line = trim($line);
+            if ($line === '' || $line[0] !== '"') {
+                // comments, "@vuln = (", ");", "1;" ...
+                continue;
+            }
+            $cols = explode("|", trim($line, "\",; \t"));
+            if (count($cols) < 5) {
+                continue;
+            }
+            $page = trim($cols[0]);
+            $first = trim($cols[1]);
+            $last = trim($cols[2]);
+            $cve = trim($cols[4]);
+            if (
+                !preg_match('/^[A-Za-z0-9._-]+$/', $page)
+                || !preg_match('/^\d+\.\d+(\.\d+)?$/', $first)
+                || !preg_match('/^\d+\.\d+(\.\d+)?$/', $last)
+            ) {
+                continue;
+            }
+            $vulnerabilities[] = [
+                'page' => $page,
+                'first' => $first,
+                'last' => $last,
+                'cve' => $cve !== '' && $cve !== '-' ? $cve : $page,
+            ];
+        }
+        return $vulnerabilities;
+    }
+
+    private function failedResult(): DiagnosticResult
+    {
+        return DiagnosticResult::singleResult(
+            $this->getLabel(),
+            DiagnosticResult::STATUS_INFORMATIONAL,
+            Piwik::translate("DiagnosticsExtended_CurlVersionCheckFailed")
+        );
     }
 }

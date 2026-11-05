@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Matomo - free/libre analytics platform
  *
@@ -9,45 +10,28 @@
 namespace Piwik\Plugins\DiagnosticsExtended\Diagnostic;
 
 use Piwik\Piwik;
-use Piwik\Plugins\Diagnostics\Diagnostic\Diagnostic;
 use Piwik\Plugins\Diagnostics\Diagnostic\DiagnosticResult;
 use Piwik\SettingsServer;
-use Psr\Log\LoggerInterface;
 
-class PhpUserCheck implements Diagnostic
+class PhpUserCheck extends AbstractCheck
 {
-    /**
-     * @var LoggerInterface
-     */
-    private $logger;
-    /**
-     * @var string
-     */
-    private $label;
-
-    public function __construct(LoggerInterface $logger)
+    protected function getLabel(): string
     {
-        $this->logger = $logger;
-        $this->label = "🧪 " . Piwik::translate("DiagnosticsExtended_PhpUserCheckLabel");
+        return self::LABEL_PREFIX . Piwik::translate("DiagnosticsExtended_PhpUserCheckLabel");
     }
 
-    /**
-     * @return DiagnosticResult[]
-     */
-    public function execute()
+    protected function doExecute(): array
     {
-        if (SettingsServer::isWindows()|| !function_exists("posix_getuid")) {
+        if (SettingsServer::isWindows() || !function_exists("posix_geteuid")) {
             return [];
         }
-        if (posix_getuid() === 0) {
+        if (posix_geteuid() === 0) {
             return [DiagnosticResult::singleResult(
-                $this->label,
+                $this->getLabel(),
                 DiagnosticResult::STATUS_WARNING,
                 Piwik::translate("DiagnosticsExtended_PhpUserCheckWarning")
             )];
         }
         return [];
     }
-
-
 }

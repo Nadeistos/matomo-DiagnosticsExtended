@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Matomo - free/libre analytics platform
  *
@@ -8,32 +9,26 @@
 
 namespace Piwik\Plugins\DiagnosticsExtended\Diagnostic;
 
-use Piwik\Plugins\Diagnostics\Diagnostic\Diagnostic;
 use Piwik\Plugins\Diagnostics\Diagnostic\DiagnosticResult;
 use Piwik\Plugins\Diagnostics\Diagnostic\DiagnosticResultItem;
-use Psr\Log\LoggerInterface;
 
-class ExampleCheck implements Diagnostic
+/**
+ * Example showing all possible result states (not registered by default, see config/config.php)
+ */
+class ExampleCheck extends AbstractCheck
 {
-    /**
-     * @var LoggerInterface
-     */
-    private $logger;
-
-    public function __construct(LoggerInterface $logger)
+    protected function getLabel(): string
     {
-        $this->logger = $logger;
+        return self::LABEL_PREFIX . "label";
     }
 
-    public function execute()
+    protected function doExecute(): array
     {
-        $result = new DiagnosticResult("🧪 label");
+        $result = new DiagnosticResult($this->getLabel());
         $result->addItem(new DiagnosticResultItem(DiagnosticResult::STATUS_ERROR, "error"));
         $result->addItem(new DiagnosticResultItem(DiagnosticResult::STATUS_WARNING, "warning"));
         $result->addItem(new DiagnosticResultItem(DiagnosticResult::STATUS_OK, "okay"));
         $result->addItem(new DiagnosticResultItem(DiagnosticResult::STATUS_INFORMATIONAL, "info"));
-        return array($result);
+        return [$result];
     }
-
-
 }

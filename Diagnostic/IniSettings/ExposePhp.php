@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Matomo - free/libre analytics platform
  *
@@ -10,12 +11,17 @@ namespace Piwik\Plugins\DiagnosticsExtended\Diagnostic\IniSettings;
 
 class ExposePhp extends IniSetting
 {
-    static public $key = "expose_php";
+    public static $key = "expose_php";
 
     public static $targetValue = false;
 
     public static $severe = false;
 
-    public static $url = "https://www.php.net/manual/de/security.hiding.php";
+    public static $url = "https://www.php.net/manual/en/ini.core.php#ini.expose-php";
 
+    public function isRelevantForCli(): bool
+    {
+        // only affects the X-Powered-By HTTP header
+        return false;
+    }
 }
